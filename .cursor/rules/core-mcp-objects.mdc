@@ -3,11 +3,18 @@ description:
 globs: 
 alwaysApply: true
 ---
-There are four major MCP object types:
+There are six major MCP object types:
 
 - Tools (src/tools/)
 - Resources (src/resources/)
 - Resource Templates (src/resources/)
 - Prompts (src/prompts)
+- Builder Nodes (src/fastmcp/builder/nodes/)
+- Workflows & Graph Specs (src/fastmcp/builder/types.py, src/fastmcp/builder/graph_*.py)
 
-While these have slightly different semantics and implementations, in general changes that affect interactions with any one (like adding tags, importing, etc.) will need to be adopted, applied, and tested on all others. Be sure to look at not only the object definition but also the related `Manager` (e.g. `ToolManager`, `ResourceManager`, and `PromptManager`). Also note that while resources and resource templates are different objects, they both are handled by the `ResourceManager`.
+While these have slightly different semantics and implementations, in general changes that affect interactions with any one (like adding tags, importing, or GUI registration) will need to be adopted, applied, and tested on all others.
+
+For Builder Nodes, updates to `NodeRegistry`, `GraphBuilder`, and GUI launcher must be kept in sync.
+For Workflows & Graph Specs, ensure any changes to `GraphSpec`, `ConnectionSpec`, and `WorkflowManager` APIs are reflected in the GUI, CLI, and agent tools.
+
+Be sure to look at not only the object definition but also the related `Manager` (e.g. `ToolManager`, `ResourceManager`, `PromptManager`, `NodeRegistry`, and `WorkflowManager`). Also note that while resources and resource templates are different objects, they both are handled by the `ResourceManager`.

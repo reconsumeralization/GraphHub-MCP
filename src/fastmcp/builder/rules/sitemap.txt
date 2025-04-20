@@ -1,0 +1,61 @@
+# Rules Sitemap
+
+rule001.txt
+Tags: branch-strategy, version-control
+Related: rule002.txt
+Relevant Files: .github/workflows, docs/servers/context.mdx
+Branch Context: feature/*, release/*, hotfix/* naming conventions
+
+rule002.txt
+Tags: commit-hygiene, version-control
+Related: rule001.txt
+Relevant Files: N/A
+Branch Context: Applies to all branch commits; enforce message templates
+
+rule003.txt
+Tags: linting, formatting
+Related: rule004.txt
+Relevant Files: .pre-commit-config.yaml, .eslintrc.js
+Branch Context: pre-commit hook in any branch; CI pipeline integration
+
+rule004.txt
+Tags: typescript, static-typing
+Related: rule003.txt
+Relevant Files: tsconfig.json
+Branch Context: TypeScript-only branches (e.g., feature/ts-*); enforce strict settings
+
+rule005.txt
+Tags: css-architecture, styling
+Related: N/A
+Relevant Files: docs/style.css, src/fastmcp/builder/gui_launcher.py
+Branch Context: UI/styling branches (e.g., feature/ui-*); isolate styling changes
+
+rule006.txt
+Tags: testing, coverage, QA
+Related: rule003.txt, rule007.txt
+Relevant Files: tests/, src/fastmcp
+Branch Context: feature/tests-* branches; enforce 90%+ coverage
+
+rule007.txt
+Tags: CI, automation, pipeline
+Related: rule003.txt, rule006.txt, rule008.txt
+Relevant Files: .github/workflows, docs/ci/overview.mdx
+Branch Context: CI pipeline branches; pull request validation
+
+rule008.txt
+Tags: security, dependencies, vulnerability-scanning
+Related: rule007.txt
+Relevant Files: package.json, requirements.txt, .github/workflows/security-scan.yml
+Branch Context: security-scan branches; integrate automated scans
+
+rule009.txt
+Tags: error-handling, resilience, retry-policy
+Related: rule010.txt
+Relevant Files: src/fastmcp/execution_engine/executor.py, src/fastmcp/builder/graph_cli.py
+Branch Context: feature/error-handling-* branches; implement backoff strategies
+
+rule010.txt
+Tags: logging, observability, correlation-id
+Related: rule009.txt
+Relevant Files: src/fastmcp/utilities/logging.py, src/fastmcp/builder/graph_logger.py
+Branch Context: feature/logging-* branches; use structured JSON logs 

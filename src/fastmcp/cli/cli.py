@@ -1,4 +1,4 @@
-"""FastmMCP CLI tools."""
+"""FastMCP CLI tools."""
 
 import importlib.metadata
 import importlib.util
@@ -26,11 +26,11 @@ app = typer.Typer(
     name="fastmcp",
     help="FastMCP CLI",
     add_completion=False,
-    no_args_is_help=True,  # Show help if no args provided
+    no_args_is_help=True,
 )
 
 
-def _get_npx_command():
+def _get_npx_command() -> str | None:
     """Get the correct npx command for the current platform."""
     if sys.platform == "win32":
         # Try both npx.cmd and npx.exe on Windows
@@ -43,7 +43,7 @@ def _get_npx_command():
             except subprocess.CalledProcessError:
                 continue
         return None
-    return "npx"  # On Unix-like systems, just use npx
+    return "npx"
 
 
 def _parse_env_var(env_var: str) -> tuple[str, str]:
@@ -63,9 +63,7 @@ def _build_uv_command(
     with_packages: list[str] | None = None,
 ) -> list[str]:
     """Build the uv run command that runs a MCP server through mcp run."""
-    cmd = ["uv"]
-
-    cmd.extend(["run", "--with", "fastmcp"])
+    cmd: list[str] = ["uv", "run", "--with", "fastmcp"]
 
     if with_editable:
         cmd.extend(["--with-editable", str(with_editable)])
@@ -75,7 +73,6 @@ def _build_uv_command(
             if pkg:
                 cmd.extend(["--with", pkg])
 
-    # Add mcp run command
     cmd.extend(["fastmcp", "run", file_spec])
     return cmd
 
@@ -89,17 +86,12 @@ def _parse_file_path(file_spec: str) -> tuple[Path, str | None]:
     Returns:
         Tuple of (file_path, server_object)
     """
-    # First check if we have a Windows path (e.g., C:\...)
     has_windows_drive = len(file_spec) > 1 and file_spec[1] == ":"
-
-    # Split on the last colon, but only if it's not part of the Windows drive letter
-    # and there's actually another colon in the string after the drive letter
     if ":" in (file_spec[2:] if has_windows_drive else file_spec):
         file_str, server_object = file_spec.rsplit(":", 1)
     else:
         file_str, server_object = file_spec, None
 
-    # Resolve the file path
     file_path = Path(file_str).expanduser().resolve()
     if not file_path.exists():
         logger.error(f"File not found: {file_path}")
@@ -121,12 +113,10 @@ def _import_server(file: Path, server_object: str | None = None):
     Returns:
         The server object
     """
-    # Add parent directory to Python path so imports can be resolved
     file_dir = str(file.parent)
     if file_dir not in sys.path:
         sys.path.insert(0, file_dir)
 
-    # Import the module
     spec = importlib.util.spec_from_file_location("server_module", file)
     if not spec or not spec.loader:
         logger.error("Could not load module", extra={"file": str(file)})
@@ -135,13 +125,10 @@ def _import_server(file: Path, server_object: str | None = None):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    # If no object specified, try common server names
     if not server_object:
-        # Look for the most common server object names
         for name in ["mcp", "server", "app"]:
             if hasattr(module, name):
                 return getattr(module, name)
-
         logger.error(
             f"No server object found in {file}. Please either:\n"
             "1. Use a standard variable name (mcp, server, or app)\n"
@@ -150,7 +137,6 @@ def _import_server(file: Path, server_object: str | None = None):
         )
         sys.exit(1)
 
-    # Handle module:object syntax
     if ":" in server_object:
         module_name, object_name = server_object.split(":", 1)
         try:
@@ -163,7 +149,6 @@ def _import_server(file: Path, server_object: str | None = None):
             )
             sys.exit(1)
     else:
-        # Just object name
         server = getattr(module, server_object, None)
 
     if server is None:
@@ -177,23 +162,38 @@ def _import_server(file: Path, server_object: str | None = None):
 
 
 @app.command()
-def version(ctx: Context):
+def version(ctx: Context) -> None:
     if ctx.resilient_parsing:
         return
 
+    try:
+        mcp_version = importlib.metadata.version("mcp")
+    except importlib.metadata.PackageNotFoundError:
+        mcp_version = "Not installed"
+
+    try:
+        fastmcp_version = fastmcp.__version__
+    except AttributeError:
+        fastmcp_version = "Unknown"
+
+    try:
+        root_path = f"~/{Path(__file__).resolve().parents[3].relative_to(Path.home())}"
+    except Exception:
+        root_path = str(Path(__file__).resolve().parents[3])
+
     info = {
-        "FastMCP version": fastmcp.__version__,
-        "MCP version": importlib.metadata.version("mcp"),
+        "FastMCP version": fastmcp_version,
+        "MCP version": mcp_version,
         "Python version": platform.python_version(),
         "Platform": platform.platform(),
-        "FastMCP root path": f"~/{Path(__file__).resolve().parents[3].relative_to(Path.home())}",
+        "FastMCP root path": root_path,
     }
 
     g = Table.grid(padding=(0, 1))
     g.add_column(style="bold", justify="left")
     g.add_column(style="cyan", justify="right")
     for k, v in info.items():
-        g.add_row(k + ":", str(v).replace("\n", " "))
+        g.add_row(f"{k}:", str(v).replace("\n", " "))
     console.print(g)
 
     raise Exit()
@@ -238,14 +238,12 @@ def dev(
     )
 
     try:
-        # Import server to get dependencies
         server = _import_server(file, server_object)
         if hasattr(server, "dependencies"):
             with_packages = list(set(with_packages + server.dependencies))
 
         uv_cmd = _build_uv_command(file_spec, with_editable, with_packages)
 
-        # Get the correct npx command
         npx_cmd = _get_npx_command()
         if not npx_cmd:
             logger.error(
@@ -254,13 +252,12 @@ def dev(
             )
             sys.exit(1)
 
-        # Run the MCP Inspector command with shell=True on Windows
         shell = sys.platform == "win32"
         process = subprocess.run(
             [npx_cmd, "@modelcontextprotocol/inspector"] + uv_cmd,
             check=True,
             shell=shell,
-            env=dict(os.environ.items()),  # Convert to list of tuples for env update
+            env=os.environ.copy(),
         )
         sys.exit(process.returncode)
     except subprocess.CalledProcessError as e:
@@ -323,14 +320,14 @@ def run(
 ) -> None:
     """Run a MCP server.
 
-    The server can be specified in two ways:\n
-    1. Module approach: server.py - runs the module directly, expecting a server.run() call.\n
-    2. Import approach: server.py:app - imports and runs the specified server object.\n\n
+    The server can be specified in two ways:
+    1. Module approach: server.py - runs the module directly, expecting a server.run() call.
+    2. Import approach: server.py:app - imports and runs the specified server object.
 
     Note: This command runs the server directly. You are responsible for ensuring
-    all dependencies are available.\n
+    all dependencies are available.
     For dependency management, use `mcp install` or `mcp dev` instead.
-    """  # noqa: E501
+    """
     file, server_object = _parse_file_path(file_spec)
 
     logger.debug(
@@ -346,12 +343,10 @@ def run(
     )
 
     try:
-        # Import and get server object
         server = _import_server(file, server_object)
 
-        logger.info(f'Found server "{server.name}" in {file}')
+        logger.info(f'Found server "{getattr(server, "name", "unknown")}" in {file}')
 
-        # Run the server
         kwargs = {}
         if transport:
             kwargs["transport"] = transport
@@ -386,8 +381,7 @@ def install(
         typer.Option(
             "--name",
             "-n",
-            help="Custom name for the server (defaults to server's name attribute or"
-            " file name)",
+            help="Custom name for the server (defaults to server's name attribute or file name)",
         ),
     ] = None,
     with_editable: Annotated[
@@ -451,32 +445,26 @@ def install(
         logger.error("Claude app not found")
         sys.exit(1)
 
-    # Try to import server to get its name, but fall back to file name if dependencies
-    # missing
     name = server_name
     server = None
     if not name:
         try:
             server = _import_server(file, server_object)
-            name = server.name
+            name = getattr(server, "name", file.stem)
         except (ImportError, ModuleNotFoundError) as e:
             logger.debug(
-                "Could not import server (likely missing dependencies), using file"
-                " name",
+                "Could not import server (likely missing dependencies), using file name",
                 extra={"error": str(e)},
             )
             name = file.stem
 
-    # Get server dependencies if available
     server_dependencies = getattr(server, "dependencies", []) if server else []
     if server_dependencies:
         with_packages = list(set(with_packages + server_dependencies))
 
-    # Process environment variables if provided
     env_dict: dict[str, str] | None = None
     if env_file or env_vars:
         env_dict = {}
-        # Load from .env file if specified
         if env_file:
             try:
                 env_dict |= {
@@ -487,8 +475,6 @@ def install(
             except Exception as e:
                 logger.error(f"Failed to load .env file: {e}")
                 sys.exit(1)
-
-        # Add command line environment variables
         for env_var in env_vars:
             key, value = _parse_env_var(env_var)
             env_dict[key] = value

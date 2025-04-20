@@ -1,0 +1,1 @@
+﻿Rule 003: Run ESLint and Prettier via pre-commit hooks before every commit

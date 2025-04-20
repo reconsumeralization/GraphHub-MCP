@@ -10,24 +10,30 @@ from fastmcp.utilities.logging import get_logger
 
 logger = get_logger(__name__)
 
-
 def get_claude_config_path() -> Path | None:
-    """Get the Claude config directory based on platform."""
+    """
+    Get the Claude config directory based on platform.
+
+    Returns:
+        Path to the Claude config directory, or None if not found.
+    """
+    # Platform-specific config path logic
     if sys.platform == "win32":
-        path = Path(Path.home(), "AppData", "Roaming", "Claude")
+        path = Path.home() / "AppData" / "Roaming" / "Claude"
     elif sys.platform == "darwin":
-        path = Path(Path.home(), "Library", "Application Support", "Claude")
+        path = Path.home() / "Library" / "Application Support" / "Claude"
     elif sys.platform.startswith("linux"):
-        path = Path(
-            os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"), "Claude"
-        )
+        config_home = os.environ.get("XDG_CONFIG_HOME")
+        if config_home:
+            path = Path(config_home) / "Claude"
+        else:
+            path = Path.home() / ".config" / "Claude"
     else:
         return None
 
     if path.exists():
         return path
     return None
-
 
 def update_claude_config(
     file_spec: str,
@@ -37,7 +43,8 @@ def update_claude_config(
     with_packages: list[str] | None = None,
     env_vars: dict[str, str] | None = None,
 ) -> bool:
-    """Add or update a FastMCP server in Claude's configuration.
+    """
+    Add or update a FastMCP server in Claude's configuration.
 
     Args:
         file_spec: Path to the server file, optionally with :object suffix
@@ -47,9 +54,11 @@ def update_claude_config(
         env_vars: Optional dictionary of environment variables. These are merged with
             any existing variables, with new values taking precedence.
 
+    Returns:
+        True if the config was updated successfully, False otherwise.
+
     Raises:
-        RuntimeError: If Claude Desktop's config directory is not found, indicating
-            Claude Desktop may not be installed or properly set up.
+        RuntimeError: If Claude Desktop's config directory is not found.
     """
     config_dir = get_claude_config_path()
     if not config_dir:
@@ -73,62 +82,86 @@ def update_claude_config(
             return False
 
     try:
-        config = json.loads(config_file.read_text())
-        if "mcpServers" not in config:
+        config_text = config_file.read_text()
+        try:
+            config = json.loads(config_text)
+        except json.JSONDecodeError:
+            # If the config file is corrupted, reset to empty
+            logger.warning(
+                "Claude config file was not valid JSON, resetting to empty.",
+                extra={"config_file": str(config_file)},
+            )
+            config = {}
+
+        if "mcpServers" not in config or not isinstance(config["mcpServers"], dict):
             config["mcpServers"] = {}
 
-        # Always preserve existing env vars and merge with new ones
+        # Merge environment variables, preserving existing ones unless overridden
+        merged_env: dict[str, str] | None = None
         if (
             server_name in config["mcpServers"]
             and "env" in config["mcpServers"][server_name]
+            and isinstance(config["mcpServers"][server_name]["env"], dict)
         ):
             existing_env = config["mcpServers"][server_name]["env"]
             if env_vars:
-                # New vars take precedence over existing ones
-                env_vars = {**existing_env, **env_vars}
+                merged_env = {**existing_env, **env_vars}
             else:
-                env_vars = existing_env
+                merged_env = existing_env
+        elif env_vars:
+            merged_env = env_vars
 
         # Build uv run command
-        args = ["run"]
+        args: list[str] = ["run"]
 
-        # Collect all packages in a set to deduplicate
+        # Deduplicate and sort packages
         packages = {"fastmcp"}
         if with_packages:
             packages.update(pkg for pkg in with_packages if pkg)
-
-        # Add all packages with --with
         for pkg in sorted(packages):
             args.extend(["--with", pkg])
 
         if with_editable:
             args.extend(["--with-editable", str(with_editable)])
 
-        # Convert file path to absolute before adding to command
-        # Split off any :object suffix first
+        # Handle file_spec with optional :object suffix
         if ":" in file_spec:
             file_path, server_object = file_spec.rsplit(":", 1)
-            file_spec = f"{Path(file_path).resolve()}:{server_object}"
+            abs_file_path = str(Path(file_path).resolve())
+            file_spec_abs = f"{abs_file_path}:{server_object}"
         else:
-            file_spec = str(Path(file_spec).resolve())
+            file_spec_abs = str(Path(file_spec).resolve())
 
-        # Add fastmcp run command
-        args.extend(["fastmcp", "run", file_spec])
+        args.extend(["fastmcp", "run", file_spec_abs])
 
-        server_config: dict[str, Any] = {"command": "uv", "args": args}
-
-        # Add environment variables if specified
-        if env_vars:
-            server_config["env"] = env_vars
+        server_config: dict[str, Any] = {
+            "command": "uv",
+            "args": args,
+        }
+        if merged_env:
+            server_config["env"] = merged_env
 
         config["mcpServers"][server_name] = server_config
 
-        config_file.write_text(json.dumps(config, indent=2))
+        # Write config atomically
+        try:
+            config_file.write_text(json.dumps(config, indent=2))
+        except Exception as e:
+            logger.error(
+                "Failed to write Claude config file",
+                extra={
+                    "error": str(e),
+                    "config_file": str(config_file),
+                },
+            )
+            return False
+
         logger.info(
             f"Added server '{server_name}' to Claude config",
             extra={"config_file": str(config_file)},
         )
         return True
+
     except Exception as e:
         logger.error(
             "Failed to update Claude config",
@@ -138,3 +171,9 @@ def update_claude_config(
             },
         )
         return False
+
+# TODO: Add unit tests for update_claude_config covering:
+# - Corrupted config file
+# - Merging env vars
+# - Editable and package options
+# - File_spec with and without :object

@@ -1,0 +1,75 @@
+# Branching Strategy Map
+
+## Core Branches
+
+- **main**
+  - Always production-ready and deployable.
+  - Only merge in release or hotfix branches via pull requests.
+
+- **develop**
+  - Integration branch for completed features.
+  - Merge features into this branch; used by CI for integration tests.
+
+## Supporting Branch Types
+
+- **feature/{ticket-id}-{short-description}**
+  - Topic branches for new functionality or enhancements.
+  - Based off `develop` and merged back via pull request after review.
+  - Example: `feature/1234-add-user-auth`.
+
+- **release/{version}**
+  - Stabilization branches for upcoming releases.
+  - Based off `develop`, bug‑fix and doc edits here.
+  - Once ready, merge into `main` (tag release), then merge `main` back into `develop`.
+  - Example: `release/1.2.0`.
+
+- **hotfix/{version}-{short-description}**
+  - Emergency fixes for production issues.
+  - Based off `main`, merged back into both `main` and `develop` after approval.
+  - Example: `hotfix/1.2.1-fix-crash-on-startup`.
+
+- **support/{legacy-version}**
+  - Long‑term maintenance branches for older releases.
+  - Based off a tagged `main` version, used for critical fixes only.
+  - Example: `support/1.0.x`.
+
+- **experiment/{name}**
+  - Experimental or spike branches not intended for production.
+  - Used for prototyping; may never get merged.
+  - Example: `experiment/proto-graphql-integration`.
+
+## Merge & Workflow Rules
+
+1. **Feature Workflow**
+   - Create `feature/*` from `develop`.
+   - Code review + tests → merge into `develop`.
+
+2. **Release Workflow**
+   - Create `release/*` from `develop`.
+   - Stabilize, update docs, bump versions.
+   - Merge into `main` (create tag) and then `develop`.
+
+3. **Hotfix Workflow**
+   - Create `hotfix/*` from `main`.
+   - Fix issue immediately.
+   - Merge into `main` (tag fix) and then `develop`.
+
+4. **Support Workflow**
+   - Fork `support/*` from a historical tag on `main`.
+   - Only patch critical bugs.
+   - Cherry‑pick to `main`/`develop` as needed.
+
+5. **Experiment Workflow**
+   - Branch off `develop` or `main` as needed.
+   - No guarantee of merging; use short‑lived PRs for feedback.
+
+## Naming Patterns (Regex)
+
+- feature: `^feature\/\d+\-[a-z0-9\-]+$`
+- release: `^release\/\d+\.\d+\.\d+$`
+- hotfix: `^hotfix\/\d+\.\d+\.\d+\-[a-z0-9\-]+$`
+- support: `^support\/\d+\.\d+\.x$`
+- experiment: `^experiment\/[a-z0-9\-]+$`
+
+---
+*This branching map serves as the foundational guide for our meta‑rules and tag‑driven rule delivery.* 

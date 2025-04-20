@@ -1,0 +1,1 @@
+﻿Rule 009: Implement global error handling with consistent retry/backoff policies.

@@ -11,10 +11,11 @@ import anyio.to_thread
 import httpx
 import pydantic.json
 import pydantic_core
-from pydantic import Field, ValidationInfo
+from pydantic import Field, ValidationInfo, field_validator
 
 from fastmcp.resources.resource import Resource
 
+# TODO: Move shared validators to a mixin or utility if more resources need absolute path validation.
 
 class TextResource(Resource):
     """A resource that reads from a string."""
@@ -64,11 +65,13 @@ class FunctionResource(Resource):
             if isinstance(result, str):
                 return result
             try:
+                # pydantic_core.to_jsonable_python is preferred for safe serialization
                 return json.dumps(pydantic_core.to_jsonable_python(result))
             except (TypeError, pydantic_core.PydanticSerializationError):
                 # If JSON serialization fails, try str()
                 return str(result)
         except Exception as e:
+            # TODO: Add logging here for better traceability
             raise ValueError(f"Error reading resource {self.uri}: {e}")
 
 
@@ -88,7 +91,7 @@ class FileResource(Resource):
         description="MIME type of the resource content",
     )
 
-    @pydantic.field_validator("path")
+    @field_validator("path")
     @classmethod
     def validate_absolute_path(cls, path: Path) -> Path:
         """Ensure path is absolute."""
@@ -96,7 +99,7 @@ class FileResource(Resource):
             raise ValueError("Path must be absolute")
         return path
 
-    @pydantic.field_validator("is_binary")
+    @field_validator("is_binary")
     @classmethod
     def set_binary_from_mime_type(cls, is_binary: bool, info: ValidationInfo) -> bool:
         """Set is_binary based on mime_type if not explicitly set."""
@@ -112,6 +115,7 @@ class FileResource(Resource):
                 return await anyio.to_thread.run_sync(self.path.read_bytes)
             return await anyio.to_thread.run_sync(self.path.read_text)
         except Exception as e:
+            # TODO: Add logging here for better traceability
             raise ValueError(f"Error reading file {self.path}: {e}")
 
 
@@ -125,10 +129,15 @@ class HttpResource(Resource):
 
     async def read(self) -> str | bytes:
         """Read the HTTP content."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(self.url)
-            response.raise_for_status()
-            return response.text
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(self.url)
+                response.raise_for_status()
+                # TODO: Support binary content if mime_type is not text or json
+                return response.text
+        except Exception as e:
+            # TODO: Add logging here for better traceability
+            raise ValueError(f"Error reading HTTP resource {self.url}: {e}")
 
 
 class DirectoryResource(Resource):
@@ -145,7 +154,7 @@ class DirectoryResource(Resource):
         default="application/json", description="MIME type of the resource content"
     )
 
-    @pydantic.field_validator("path")
+    @field_validator("path")
     @classmethod
     def validate_absolute_path(cls, path: Path) -> Path:
         """Ensure path is absolute."""
@@ -173,13 +182,16 @@ class DirectoryResource(Resource):
                 else list(self.path.rglob("*"))
             )
         except Exception as e:
+            # TODO: Add logging here for better traceability
             raise ValueError(f"Error listing directory {self.path}: {e}")
 
-    async def read(self) -> str:  # Always returns JSON string
-        """Read the directory listing."""
+    async def read(self) -> str:
+        """Read the directory listing as a JSON string."""
         try:
             files = await anyio.to_thread.run_sync(self.list_files)
             file_list = [str(f.relative_to(self.path)) for f in files if f.is_file()]
             return json.dumps({"files": file_list}, indent=2)
         except Exception as e:
+            # TODO: Add logging here for better traceability
             raise ValueError(f"Error reading directory {self.path}: {e}")
+

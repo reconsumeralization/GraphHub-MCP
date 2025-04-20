@@ -5,9 +5,7 @@ import os
 import shutil
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import (
-    TypedDict,
-)
+from typing import TypedDict
 
 from exceptiongroup import BaseExceptionGroup, catch
 from mcp import ClientSession, McpError, StdioServerParameters
@@ -27,7 +25,7 @@ from typing_extensions import Unpack
 from fastmcp.exceptions import ClientError
 from fastmcp.server import FastMCP as FastMCPServer
 
-
+# TODO: Consider moving SessionKwargs to a dedicated types module for reusability.
 class SessionKwargs(TypedDict, total=False):
     """Keyword arguments for the MCP ClientSession constructor."""
 
@@ -77,11 +75,10 @@ class WSTransport(ClientTransport):
     """Transport implementation that connects to an MCP server via WebSockets."""
 
     def __init__(self, url: str | AnyUrl):
-        if isinstance(url, AnyUrl):
-            url = str(url)
-        if not isinstance(url, str) or not url.startswith("ws"):
+        url_str = str(url) if isinstance(url, AnyUrl) else url
+        if not isinstance(url_str, str) or not url_str.startswith("ws"):
             raise ValueError("Invalid WebSocket URL provided.")
-        self.url = url
+        self.url = url_str
 
     @contextlib.asynccontextmanager
     async def connect_session(
@@ -92,7 +89,7 @@ class WSTransport(ClientTransport):
             async with ClientSession(
                 read_stream, write_stream, **session_kwargs
             ) as session:
-                await session.initialize()  # Initialize after session creation
+                await session.initialize()
                 yield session
 
     def __repr__(self) -> str:
@@ -103,11 +100,10 @@ class SSETransport(ClientTransport):
     """Transport implementation that connects to an MCP server via Server-Sent Events."""
 
     def __init__(self, url: str | AnyUrl, headers: dict[str, str] | None = None):
-        if isinstance(url, AnyUrl):
-            url = str(url)
-        if not isinstance(url, str) or not url.startswith("http"):
+        url_str = str(url) if isinstance(url, AnyUrl) else url
+        if not isinstance(url_str, str) or not url_str.startswith("http"):
             raise ValueError("Invalid HTTP/S URL provided for SSE.")
-        self.url = url
+        self.url = url_str
         self.headers = headers or {}
 
     @contextlib.asynccontextmanager
@@ -197,18 +193,18 @@ class PythonStdioTransport(StdioTransport):
             cwd: Current working directory for the subprocess
             python_cmd: Python command to use (default: "python")
         """
-        script_path = Path(script_path).resolve()
-        if not script_path.is_file():
-            raise FileNotFoundError(f"Script not found: {script_path}")
-        if not str(script_path).endswith(".py"):
-            raise ValueError(f"Not a Python script: {script_path}")
+        resolved_path = Path(script_path).resolve()
+        if not resolved_path.is_file():
+            raise FileNotFoundError(f"Script not found: {resolved_path}")
+        if not str(resolved_path).endswith(".py"):
+            raise ValueError(f"Not a Python script: {resolved_path}")
 
-        full_args = [str(script_path)]
+        full_args = [str(resolved_path)]
         if args:
             full_args.extend(args)
 
         super().__init__(command=python_cmd, args=full_args, env=env, cwd=cwd)
-        self.script_path = script_path
+        self.script_path = resolved_path
 
 
 class FastMCPStdioTransport(StdioTransport):
@@ -221,16 +217,20 @@ class FastMCPStdioTransport(StdioTransport):
         env: dict[str, str] | None = None,
         cwd: str | None = None,
     ):
-        script_path = Path(script_path).resolve()
-        if not script_path.is_file():
-            raise FileNotFoundError(f"Script not found: {script_path}")
-        if not str(script_path).endswith(".py"):
-            raise ValueError(f"Not a Python script: {script_path}")
+        resolved_path = Path(script_path).resolve()
+        if not resolved_path.is_file():
+            raise FileNotFoundError(f"Script not found: {resolved_path}")
+        if not str(resolved_path).endswith(".py"):
+            raise ValueError(f"Not a Python script: {resolved_path}")
+
+        cli_args = ["run", str(resolved_path)]
+        if args:
+            cli_args.extend(args)
 
         super().__init__(
-            command="fastmcp", args=["run", str(script_path)], env=env, cwd=cwd
+            command="fastmcp", args=cli_args, env=env, cwd=cwd
         )
-        self.script_path = script_path
+        self.script_path = resolved_path
 
 
 class NodeStdioTransport(StdioTransport):
@@ -254,18 +254,18 @@ class NodeStdioTransport(StdioTransport):
             cwd: Current working directory for the subprocess
             node_cmd: Node.js command to use (default: "node")
         """
-        script_path = Path(script_path).resolve()
-        if not script_path.is_file():
-            raise FileNotFoundError(f"Script not found: {script_path}")
-        if not str(script_path).endswith(".js"):
-            raise ValueError(f"Not a JavaScript script: {script_path}")
+        resolved_path = Path(script_path).resolve()
+        if not resolved_path.is_file():
+            raise FileNotFoundError(f"Script not found: {resolved_path}")
+        if not str(resolved_path).endswith(".js"):
+            raise ValueError(f"Not a JavaScript script: {resolved_path}")
 
-        full_args = [str(script_path)]
+        full_args = [str(resolved_path)]
         if args:
             full_args.extend(args)
 
         super().__init__(command=node_cmd, args=full_args, env=env, cwd=cwd)
-        self.script_path = script_path
+        self.script_path = resolved_path
 
 
 class UvxStdioTransport(StdioTransport):
@@ -293,13 +293,11 @@ class UvxStdioTransport(StdioTransport):
             from_package: Package to install the tool from
             env_vars: Additional environment variables
         """
-        # Basic validation
         if project_directory and not Path(project_directory).exists():
             raise NotADirectoryError(
                 f"Project directory not found: {project_directory}"
             )
 
-        # Build uvx arguments
         uvx_args = []
         if python_version:
             uvx_args.extend(["--python", python_version])
@@ -308,12 +306,10 @@ class UvxStdioTransport(StdioTransport):
         for pkg in with_packages or []:
             uvx_args.extend(["--with", pkg])
 
-        # Add the tool name and tool args
         uvx_args.append(tool_name)
         if tool_args:
             uvx_args.extend(tool_args)
 
-        # Get environment with any additional variables
         env = None
         if env_vars:
             env = os.environ.copy()
@@ -344,27 +340,22 @@ class NpxStdioTransport(StdioTransport):
             env_vars: Additional environment variables
             use_package_lock: Whether to use package-lock.json (--prefer-offline)
         """
-        # verify npx is installed
         if shutil.which("npx") is None:
             raise ValueError("Command 'npx' not found")
 
-        # Basic validation
         if project_directory and not Path(project_directory).exists():
             raise NotADirectoryError(
                 f"Project directory not found: {project_directory}"
             )
 
-        # Build npx arguments
         npx_args = []
         if use_package_lock:
             npx_args.append("--prefer-offline")
 
-        # Add the package name and args
         npx_args.append(package)
         if args:
             npx_args.extend(args)
 
-        # Get environment with any additional variables
         env = None
         if env_vars:
             env = os.environ.copy()
@@ -402,7 +393,7 @@ class FastMCPTransport(ClientTransport):
                 raise ClientError(exc)
 
         # backport of 3.11's except* syntax
-        with catch({McpError: mcperror_handler, Exception: exception_handler}):
+        with catch({McpError: mcperror_handler; Exception: exception_handler}):
             # create_connected_server_and_client_session manages the session lifecycle itself
             async with create_connected_server_and_client_session(
                 server=self._fastmcp._mcp_server,
@@ -424,31 +415,33 @@ def infer_transport(
     argument, handling various input types and converting them to the appropriate
     ClientTransport subclass.
     """
-    # the transport is already a ClientTransport
+    # Already a ClientTransport
     if isinstance(transport, ClientTransport):
         return transport
 
-    # the transport is a FastMCP server
-    elif isinstance(transport, FastMCPServer):
+    # FastMCP server instance
+    if isinstance(transport, FastMCPServer):
         return FastMCPTransport(mcp=transport)
 
-    # the transport is a path to a script
-    elif isinstance(transport, Path | str) and Path(transport).exists():
-        if str(transport).endswith(".py"):
-            return PythonStdioTransport(script_path=transport)
-        elif str(transport).endswith(".js"):
-            return NodeStdioTransport(script_path=transport)
-        else:
+    # Path to a script
+    if isinstance(transport, (Path, str)):
+        path_obj = Path(transport)
+        if path_obj.exists():
+            if str(path_obj).endswith(".py"):
+                return PythonStdioTransport(script_path=path_obj)
+            if str(path_obj).endswith(".js"):
+                return NodeStdioTransport(script_path=path_obj)
             raise ValueError(f"Unsupported script type: {transport}")
 
-    # the transport is an http(s) URL
-    elif isinstance(transport, AnyUrl | str) and str(transport).startswith("http"):
+    # HTTP(S) URL
+    if (isinstance(transport, (AnyUrl, str)) and str(transport).startswith("http")):
         return SSETransport(url=transport)
 
-    # the transport is a websocket URL
-    elif isinstance(transport, AnyUrl | str) and str(transport).startswith("ws"):
+    # WebSocket URL
+    if (isinstance(transport, (AnyUrl, str)) and str(transport).startswith("ws")):
         return WSTransport(url=transport)
 
-    # the transport is an unknown type
-    else:
-        raise ValueError(f"Could not infer a valid transport from: {transport}")
+    # Unknown type
+    raise ValueError(f"Could not infer a valid transport from: {transport}")
+
+# TODO: Add more robust URL/path validation and support for additional script types if needed.

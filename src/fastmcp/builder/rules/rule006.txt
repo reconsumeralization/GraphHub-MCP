@@ -1,0 +1,1 @@
+﻿Rule 006: Write comprehensive unit tests for all public APIs, aiming for at least 90% coverage.

@@ -1,0 +1,1 @@
+﻿Rule 008: Integrate dependency vulnerability scanning (e.g., npm audit, Snyk) in CI.

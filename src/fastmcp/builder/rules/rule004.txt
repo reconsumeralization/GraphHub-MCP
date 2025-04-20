@@ -1,0 +1,1 @@
+﻿Rule 004: Use strict TypeScript settings; avoid any and enable noImplicitAny

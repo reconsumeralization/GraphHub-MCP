@@ -12,6 +12,15 @@ dependencies = [
     "rich>=13.9.4",
     "typer>=0.15.2",
     "websockets>=15.0.1",
+    "NodeGraphQt>=0.2.2",
+    "PySide2; platform_system!='Windows'",
+    "PyQt5; platform_system=='Windows'",
+    "asteval>=0.9.26",
+    "PyYAML>=6.0",
+    "fastapi>=0.115.12",
+    "pydantic>=1.10.11",
+    "uvicorn>=0.21.1",
+    "pydantic",  # Added pydantic
 ]
 requires-python = ">=3.10"
 readme = "README.md"
@@ -54,6 +63,7 @@ dev = [
 
 [project.scripts]
 fastmcp = "fastmcp.cli:app"
+mcp-workflow-builder = "fastmcp.builder:main"
 
 [project.urls]
 Homepage = "https://gofastmcp.com"

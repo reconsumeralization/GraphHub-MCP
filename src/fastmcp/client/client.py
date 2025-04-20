@@ -150,17 +150,17 @@ class Client:
         result = await self.session.read_resource(uri)
         return result.contents
 
-    # async def subscribe_resource(self, uri: AnyUrl | str) -> None:
-    #     """Send a resources/subscribe request."""
-    #     if isinstance(uri, str):
-    #         uri = AnyUrl(uri)
-    #     await self.session.subscribe_resource(uri)
+    async def subscribe_resource(self, uri: AnyUrl | str) -> None:
+        """Send a resources/subscribe request."""
+        if isinstance(uri, str):
+            uri = AnyUrl(uri)
+        await self.session.subscribe_resource(uri)
 
-    # async def unsubscribe_resource(self, uri: AnyUrl | str) -> None:
-    #     """Send a resources/unsubscribe request."""
-    #     if isinstance(uri, str):
-    #         uri = AnyUrl(uri)
-    #     await self.session.unsubscribe_resource(uri)
+    async def unsubscribe_resource(self, uri: AnyUrl | str) -> None:
+        """Send a resources/unsubscribe request."""
+        if isinstance(uri, str):
+            uri = AnyUrl(uri)
+        await self.session.unsubscribe_resource(uri)
 
     async def list_prompts(self) -> list[mcp.types.Prompt]:
         """Send a prompts/list request."""

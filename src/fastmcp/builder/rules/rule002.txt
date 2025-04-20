@@ -1,0 +1,1 @@
+﻿Rule 002: Write atomic commits with descriptive messages referencing ticket IDs

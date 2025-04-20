@@ -115,9 +115,8 @@ class Context(BaseModel, Generic[ServerSessionT, LifespanContextT]):
         Returns:
             The resource content as either text or bytes
         """
-        assert self._fastmcp is not None, (
-            "Context is not available outside of a request"
-        )
+        if self._fastmcp is None:
+            raise ValueError("Context is not available outside of a request")
         return await self._fastmcp._mcp_read_resource(uri)
 
     async def log(
@@ -126,6 +125,7 @@ class Context(BaseModel, Generic[ServerSessionT, LifespanContextT]):
         message: str,
         *,
         logger_name: str | None = None,
+        **extra: Any,
     ) -> None:
         """Send a log message to the client.
 
@@ -136,7 +136,7 @@ class Context(BaseModel, Generic[ServerSessionT, LifespanContextT]):
             **extra: Additional structured data to include
         """
         await self.request_context.session.send_log_message(
-            level=level, data=message, logger=logger_name
+            level=level, data=message, logger=logger_name, **extra
         )
 
     @property
@@ -211,6 +211,8 @@ class Context(BaseModel, Generic[ServerSessionT, LifespanContextT]):
                 else m
                 for m in messages
             ]
+        else:
+            raise TypeError("messages must be a str or a list of str/SamplingMessage")
 
         result: CreateMessageResult = await self.request_context.session.create_message(
             messages=sampling_messages,

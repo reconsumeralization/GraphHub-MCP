@@ -23,6 +23,7 @@ class Message(BaseModel):
     content: CONTENT_TYPES
 
     def __init__(self, content: str | CONTENT_TYPES, **kwargs: Any):
+        # TODO: Support more robust type conversion for content if needed
         if isinstance(content, str):
             content = TextContent(type="text", text=content)
         super().__init__(content=content, **kwargs)
@@ -89,7 +90,7 @@ class Prompt(BaseModel):
         - A dict (converted to a message)
         - A sequence of any of the above
         """
-        func_name = name or fn.__name__
+        func_name = name if name is not None else fn.__name__
 
         if func_name == "<lambda>":
             raise ValueError("You must provide a name for lambda functions")
@@ -115,10 +116,10 @@ class Prompt(BaseModel):
 
         return cls(
             name=func_name,
-            description=description or fn.__doc__,
+            description=description if description is not None else fn.__doc__,
             arguments=arguments,
             fn=fn,
-            tags=tags or set(),
+            tags=tags if tags is not None else set(),
         )
 
     async def render(self, arguments: dict[str, Any] | None = None) -> list[Message]:
@@ -138,7 +139,7 @@ class Prompt(BaseModel):
                 result = await result
 
             # Validate messages
-            if not isinstance(result, list | tuple):
+            if not isinstance(result, (list, tuple)):
                 result = [result]
 
             # Convert result to messages
@@ -153,16 +154,17 @@ class Prompt(BaseModel):
                         content = TextContent(type="text", text=msg)
                         messages.append(Message(role="user", content=content))
                     else:
+                        # TODO: Consider supporting more types or raise a clearer error
                         content = json.dumps(pydantic_core.to_jsonable_python(msg))
                         messages.append(Message(role="user", content=content))
-                except Exception:
+                except Exception as exc:
                     raise ValueError(
                         f"Could not convert prompt result to message: {msg}"
-                    )
+                    ) from exc
 
             return messages
         except Exception as e:
-            raise ValueError(f"Error rendering prompt {self.name}: {e}")
+            raise ValueError(f"Error rendering prompt {self.name}: {e}") from e
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Prompt):
@@ -184,4 +186,7 @@ class Prompt(BaseModel):
             "description": self.description,
             "arguments": arguments,
         }
-        return MCPPrompt(**kwargs | overrides)
+        return MCPPrompt(**(kwargs | overrides))
+
+# TODO: Add more robust type validation and error handling for edge cases in prompt argument and message conversion.
+# TODO: Add unit tests for Prompt.from_function and Prompt.render covering all supported input/output types.

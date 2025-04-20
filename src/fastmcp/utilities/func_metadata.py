@@ -26,10 +26,7 @@ class ArgModelBase(BaseModel):
 
         That is, sub-models etc are not dumped - they are kept as pydantic models.
         """
-        kwargs: dict[str, Any] = {}
-        for field_name in self.__class__.model_fields.keys():
-            kwargs[field_name] = getattr(self, field_name)
-        return kwargs
+        return {field_name: getattr(self, field_name) for field_name in self.__class__.model_fields.keys()}
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -58,7 +55,8 @@ class FuncMetadata(BaseModel):
         arguments_parsed_model = self.arg_model.model_validate(arguments_pre_parsed)
         arguments_parsed_dict = arguments_parsed_model.model_dump_one_level()
 
-        arguments_parsed_dict |= arguments_to_pass_directly or {}
+        if arguments_to_pass_directly:
+            arguments_parsed_dict.update(arguments_to_pass_directly)
 
         if fn_is_async:
             if isinstance(fn, Awaitable):
@@ -81,14 +79,15 @@ class FuncMetadata(BaseModel):
         """
         new_data = data.copy()  # Shallow copy
         for field_name, _field_info in self.arg_model.model_fields.items():
-            if field_name not in data.keys():
+            if field_name not in data:
                 continue
-            if isinstance(data[field_name], str):
+            value = data[field_name]
+            if isinstance(value, str):
                 try:
-                    pre_parsed = json.loads(data[field_name])
+                    pre_parsed = json.loads(value)
                 except json.JSONDecodeError:
                     continue  # Not JSON - skip
-                if isinstance(pre_parsed, str | int | float):
+                if isinstance(pre_parsed, (str, int, float)):
                     # This is likely that the raw value is e.g. `"hello"` which we
                     # Should really be parsed as '"hello"' in Python - but if we parse
                     # it as JSON it'll turn into just 'hello'. So we skip it.
@@ -157,7 +156,6 @@ def func_metadata(
             annotation = Annotated[
                 Any,
                 Field(),
-                # 🤷
                 WithJsonSchema({"title": param.name, "type": "string"}),
             ]
 
@@ -168,15 +166,13 @@ def func_metadata(
             else PydanticUndefined,
         )
         dynamic_pydantic_model_params[param.name] = (field_info.annotation, field_info)
-        continue
 
     arguments_model = create_model(
         f"{func.__name__}Arguments",
         **dynamic_pydantic_model_params,
         __base__=ArgModelBase,
     )
-    resp = FuncMetadata(arg_model=arguments_model)
-    return resp
+    return FuncMetadata(arg_model=arguments_model)
 
 
 def _get_typed_annotation(annotation: Any, globalns: dict[str, Any]) -> Any:
@@ -192,8 +188,6 @@ def _get_typed_annotation(annotation: Any, globalns: dict[str, Any]) -> Any:
         annotation = ForwardRef(annotation)
         annotation, status = try_eval_type(annotation, globalns, globalns)
 
-        # This check and raise could perhaps be skipped, and we (FastMCP) just call
-        # model_rebuild right before using it 🤷
         if status is False:
             raise InvalidSignature(f"Unable to evaluate type annotation {annotation}")
 
@@ -213,5 +207,4 @@ def _get_typed_signature(call: Callable[..., Any]) -> inspect.Signature:
         )
         for param in signature.parameters.values()
     ]
-    typed_signature = inspect.Signature(typed_params)
-    return typed_signature
+    return inspect.Signature(typed_params)

@@ -26,7 +26,8 @@ from fastmcp.utilities.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _proxy_passthrough():
+def _proxy_passthrough(*args, **kwargs):
+    # This is a placeholder passthrough function for proxy objects.
     pass
 
 
@@ -50,8 +51,8 @@ class ProxyTool(Tool):
     async def run(
         self, arguments: dict[str, Any], context: Context | None = None
     ) -> Any:
-        # the client context manager will swallow any exceptions inside a TaskGroup
-        # so we return the raw result and raise an exception ourselves
+        # The client context manager will swallow any exceptions inside a TaskGroup,
+        # so we return the raw result and raise an exception ourselves if needed.
         async with self._client:
             result = await self._client.call_tool(
                 self.name, arguments, _return_raw_result=True
@@ -114,11 +115,11 @@ class ProxyTemplate(ResourceTemplate):
         )
 
     async def create_resource(self, uri: str, params: dict[str, Any]) -> ProxyResource:
-        # dont use the provided uri, because it may not be the same as the
+        # Don't use the provided uri, because it may not be the same as the
         # uri_template on the remote server.
-        # quote params to ensure they are valid for the uri_template
+        # Quote params to ensure they are valid for the uri_template.
         parameterized_uri = self.uri_template.format(
-            **{k: quote(v, safe="") for k, v in params.items()}
+            **{k: quote(str(v), safe="") for k, v in params.items()}
         )
         async with self._client:
             result = await self._client.read_resource(parameterized_uri)
@@ -154,7 +155,7 @@ class ProxyPrompt(Prompt):
             client=client,
             name=prompt.name,
             description=prompt.description,
-            arguments=[a.model_dump() for a in prompt.arguments or []],
+            arguments=[a.model_dump() for a in (prompt.arguments or [])],
             fn=_proxy_passthrough,
         )
 

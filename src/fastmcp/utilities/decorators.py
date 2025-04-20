@@ -9,93 +9,99 @@ P = ParamSpec("P")
 
 
 class DecoratedFunction(Generic[P, R]):
-    """Descriptor for decorated functions.
+    """
+    Descriptor for decorated functions.
 
-    You can return this object from a decorator to ensure that it works across
-    all types of functions: vanilla, instance methods, class methods, and static
-    methods; both synchronous and asynchronous.
+    This class enables decorators to work seamlessly across:
+    - Plain functions
+    - Instance methods
+    - Class methods (decorator must be applied before @classmethod)
+    - Static methods
+    - Both sync and async functions
 
-    This class is used to store the original function and metadata about how to
-    register it as a tool.
+    It stores the original function and can be used to attach metadata for tool registration.
 
     Example usage:
 
-    ```python
-    def my_decorator(fn: Callable[P, R]) -> DecoratedFunction[P, R]:
-        return DecoratedFunction(fn)
-    ```
+        def my_decorator(fn: Callable[P, R]) -> DecoratedFunction[P, R]:
+            return DecoratedFunction(fn)
 
     On a function:
-    ```python
-    @my_decorator
-    def my_function(a: int, b: int) -> int:
-        return a + b
-    ```
-
-    On an instance method:
-    ```python
-    class Test:
-        @my_decorator
-        def my_function(self, a: int, b: int) -> int:
-            return a + b
-    ```
-
-    On a class method:
-    ```python
-    class Test:
-        @classmethod
-        @my_decorator
-        def my_function(cls, a: int, b: int) -> int:
-            return a + b
-    ```
-
-    Note that for classmethods, the decorator must be applied first, then
-    `@classmethod` on top.
-
-    On a static method:
-    ```python
-    class Test:
-        @staticmethod
         @my_decorator
         def my_function(a: int, b: int) -> int:
             return a + b
-    ```
+
+    On an instance method:
+        class Test:
+            @my_decorator
+            def my_function(self, a: int, b: int) -> int:
+                return a + b
+
+    On a class method:
+        class Test:
+            @classmethod
+            @my_decorator
+            def my_function(cls, a: int, b: int) -> int:
+                return a + b
+
+        # NOTE: Decorator must be applied before @classmethod!
+
+    On a static method:
+        class Test:
+            @staticmethod
+            @my_decorator
+            def my_function(a: int, b: int) -> int:
+                return a + b
     """
 
-    def __init__(self, fn: Callable[P, R]):
+    fn: Callable[P, R]
+
+    def __init__(self, fn: Callable[P, R]) -> None:
         self.fn = fn
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
-        """Call the original function."""
+        """
+        Call the original function.
+
+        Raises:
+            TypeError: If used incorrectly with classmethod decorator order.
+        """
         try:
             return self.fn(*args, **kwargs)
         except TypeError as e:
+            # Provide a clear error if decorator order is wrong for classmethods
             if "'classmethod' object is not callable" in str(e):
                 raise TypeError(
                     "To apply this decorator to a classmethod, apply the decorator first, then @classmethod on top."
-                )
+                ) from e
             raise
 
     @overload
     def __get__(self, instance: None, owner: type | None = None) -> Self: ...
-
     @overload
-    def __get__(
-        self, instance: object, owner: type | None = None
-    ) -> Callable[P, R]: ...
+    def __get__(self, instance: object, owner: type | None = None) -> Callable[P, R]: ...
 
     def __get__(
         self, instance: object | None, owner: type | None = None
     ) -> Self | Callable[P, R]:
-        """Return the original function when accessed from an instance, or self when accessed from the class."""
+        """
+        Descriptor protocol: return self when accessed from the class,
+        or the function bound to the instance when accessed from an instance.
+        """
         if instance is None:
             return self
         # Return the original function bound to the instance
+        # TODO: Consider supporting binding for classmethod/staticmethod if needed
         return cast(Callable[P, R], self.fn.__get__(instance, owner))
 
     def __repr__(self) -> str:
-        """Return a representation that matches Python's function representation."""
+        """
+        Return a representation that matches Python's function representation.
+        """
         module = getattr(self.fn, "__module__", "unknown")
         qualname = getattr(self.fn, "__qualname__", str(self.fn))
         sig_str = str(inspect.signature(self.fn))
         return f"<function {module}.{qualname}{sig_str}>"
+
+# TODO: Add unit tests for edge cases (classmethod/staticmethod, async functions, etc.)
+# TODO: Consider supporting functools.wraps for better introspection

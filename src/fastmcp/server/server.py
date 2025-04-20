@@ -67,18 +67,11 @@ class MountedServer:
         resource_separator: str | None = None,
         prompt_separator: str | None = None,
     ):
-        if tool_separator is None:
-            tool_separator = "_"
-        if resource_separator is None:
-            resource_separator = "+"
-        if prompt_separator is None:
-            prompt_separator = "_"
-
         self.server = server
         self.prefix = prefix
-        self.tool_separator = tool_separator
-        self.resource_separator = resource_separator
-        self.prompt_separator = prompt_separator
+        self.tool_separator = tool_separator if tool_separator is not None else "_"
+        self.resource_separator = resource_separator if resource_separator is not None else "+"
+        self.prompt_separator = prompt_separator if prompt_separator is not None else "_"
 
     async def get_tools(self) -> dict[str, Tool]:
         tools = await self.server.get_tools()
@@ -140,8 +133,7 @@ class TimedCache:
         value = self.cache.get(key)
         if value is not None and value[1] > datetime.datetime.now():
             return value[0]
-        else:
-            return NOT_FOUND
+        return NOT_FOUND
 
     def clear(self) -> None:
         self.cache.clear()
@@ -193,7 +185,6 @@ class FastMCP(Generic[LifespanResultT]):
                 seconds=self.settings.cache_expiration_seconds
             )
         )
-
         self._mounted_servers: dict[str, MountedServer] = {}
 
         if lifespan is None:
@@ -247,7 +238,7 @@ class FastMCP(Generic[LifespanResultT]):
 
         if transport == "stdio":
             await self.run_stdio_async(**transport_kwargs)
-        else:  # transport == "sse"
+        else:
             await self.run_sse_async(**transport_kwargs)
 
     def run(
@@ -276,18 +267,17 @@ class FastMCP(Generic[LifespanResultT]):
         Returns a Context object. Note that the context will only be valid
         during a request; outside a request, most methods will error.
         """
-
         try:
             request_context = self._mcp_server.request_context
         except LookupError:
             request_context = None
         from fastmcp.server.context import Context
-
         return Context(request_context=request_context, fastmcp=self)
 
     async def get_tools(self) -> dict[str, Tool]:
         """Get all registered tools, indexed by registered key."""
-        if (tools := self._cache.get("tools")) is NOT_FOUND:
+        tools = self._cache.get("tools")
+        if tools is NOT_FOUND:
             tools = {}
             for server in self._mounted_servers.values():
                 server_tools = await server.get_tools()
@@ -298,7 +288,8 @@ class FastMCP(Generic[LifespanResultT]):
 
     async def get_resources(self) -> dict[str, Resource]:
         """Get all registered resources, indexed by registered key."""
-        if (resources := self._cache.get("resources")) is NOT_FOUND:
+        resources = self._cache.get("resources")
+        if resources is NOT_FOUND:
             resources = {}
             for server in self._mounted_servers.values():
                 server_resources = await server.get_resources()
@@ -309,7 +300,8 @@ class FastMCP(Generic[LifespanResultT]):
 
     async def get_resource_templates(self) -> dict[str, ResourceTemplate]:
         """Get all registered resource templates, indexed by registered key."""
-        if (templates := self._cache.get("resource_templates")) is NOT_FOUND:
+        templates = self._cache.get("resource_templates")
+        if templates is NOT_FOUND:
             templates = {}
             for server in self._mounted_servers.values():
                 server_templates = await server.get_resource_templates()
@@ -322,7 +314,8 @@ class FastMCP(Generic[LifespanResultT]):
         """
         List all available prompts.
         """
-        if (prompts := self._cache.get("prompts")) is NOT_FOUND:
+        prompts = self._cache.get("prompts")
+        if prompts is NOT_FOUND:
             prompts = {}
             for server in self._mounted_servers.values():
                 server_prompts = await server.get_prompts()
@@ -335,7 +328,6 @@ class FastMCP(Generic[LifespanResultT]):
         """
         List all available tools, in the format expected by the low-level MCP
         server.
-
         """
         tools = await self.get_tools()
         return [tool.to_mcp_tool(name=key) for key, tool in tools.items()]
@@ -344,7 +336,6 @@ class FastMCP(Generic[LifespanResultT]):
         """
         List all available resources, in the format expected by the low-level MCP
         server.
-
         """
         resources = await self.get_resources()
         return [
@@ -355,7 +346,6 @@ class FastMCP(Generic[LifespanResultT]):
         """
         List all available resource templates, in the format expected by the low-level
         MCP server.
-
         """
         templates = await self.get_resource_templates()
         return [
@@ -367,7 +357,6 @@ class FastMCP(Generic[LifespanResultT]):
         """
         List all available prompts, in the format expected by the low-level MCP
         server.
-
         """
         prompts = await self.get_prompts()
         return [prompt.to_mcp_prompt(name=key) for key, prompt in prompts.items()]
@@ -379,7 +368,6 @@ class FastMCP(Generic[LifespanResultT]):
         if self._tool_manager.has_tool(key):
             context = self.get_context()
             result = await self._tool_manager.call_tool(key, arguments, context=context)
-
         else:
             for server in self._mounted_servers.values():
                 if server.match_tool(key):
@@ -419,7 +407,6 @@ class FastMCP(Generic[LifespanResultT]):
         """
         Get a prompt by name with arguments, in the format expected by the low-level
         MCP server.
-
         """
         if self._prompt_manager.has_prompt(name):
             messages = await self._prompt_manager.render_prompt(name, arguments)
@@ -487,8 +474,6 @@ class FastMCP(Generic[LifespanResultT]):
                 await context.report_progress(50, 100)
                 return str(x)
         """
-
-        # Check if user passed function directly instead of calling decorator
         if callable(name):
             raise TypeError(
                 "The @tool decorator was used incorrectly. "
@@ -507,7 +492,6 @@ class FastMCP(Generic[LifespanResultT]):
         Args:
             resource: A Resource instance to add
         """
-
         self._resource_manager.add_resource(resource, key=key)
         self._cache.clear()
 
@@ -589,7 +573,6 @@ class FastMCP(Generic[LifespanResultT]):
                 data = await fetch_weather(city)
                 return f"Weather for {city}: {data}"
         """
-        # Check if user passed function directly instead of calling decorator
         if callable(uri):
             raise TypeError(
                 "The @resource decorator was used incorrectly. "
@@ -669,7 +652,6 @@ class FastMCP(Generic[LifespanResultT]):
                     }
                 ]
         """
-        # Check if user passed function directly instead of calling decorator
         if callable(name):
             raise TypeError(
                 "The @prompt decorator was used incorrectly. "
@@ -800,12 +782,9 @@ class FastMCP(Generic[LifespanResultT]):
             to "_") resource_separator: Separator for resource URIs (defaults to
             "+") prompt_separator: Separator for prompt names (defaults to "_")
         """
-        if tool_separator is None:
-            tool_separator = "_"
-        if resource_separator is None:
-            resource_separator = "+"
-        if prompt_separator is None:
-            prompt_separator = "_"
+        tool_separator = tool_separator if tool_separator is not None else "_"
+        resource_separator = resource_separator if resource_separator is not None else "+"
+        prompt_separator = prompt_separator if prompt_separator is not None else "_"
 
         # Import tools from the mounted server
         tool_prefix = f"{prefix}{tool_separator}"
@@ -850,14 +829,13 @@ class FastMCP(Generic[LifespanResultT]):
         """
         Create a FastMCP server from a FastAPI application.
         """
-
         from .openapi import FastMCPOpenAPI
 
         client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://fastapi"
         )
 
-        name = name or app.title
+        name = name or getattr(app, "title", None)
 
         return FastMCPOpenAPI(
             openapi_spec=app.openapi(), client=client, name=name, **settings

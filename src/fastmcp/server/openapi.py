@@ -122,10 +122,10 @@ class OpenAPITool(Tool):
             name=name,
             description=description,
             parameters=parameters,
-            fn=self._execute_request,  # We'll use an instance method instead of a global function
+            fn=self._execute_request,
             fn_metadata=fn_metadata,
             is_async=is_async,
-            context_kwarg="context",  # Default context keyword argument
+            context_kwarg="context",
             tags=tags,
         )
         self._client = client
@@ -198,7 +198,7 @@ class OpenAPITool(Tool):
                 params=query_params,
                 headers=headers,
                 json=json_data,
-                timeout=30.0,  # Default timeout
+                timeout=30.0,
             )
 
             # Raise for 4xx/5xx responses
@@ -208,11 +208,9 @@ class OpenAPITool(Tool):
             try:
                 return response.json()
             except (json.JSONDecodeError, ValueError):
-                # Return text content if not JSON
                 return response.text
 
         except httpx.HTTPStatusError as e:
-            # Handle HTTP errors (4xx, 5xx)
             error_message = (
                 f"HTTP error {e.response.status_code}: {e.response.reason_phrase}"
             )
@@ -226,7 +224,6 @@ class OpenAPITool(Tool):
             raise ValueError(error_message)
 
         except httpx.RequestError as e:
-            # Handle request errors (connection, timeout, etc.)
             raise ValueError(f"Request error: {str(e)}")
 
     async def run(self, arguments: dict[str, Any], context: Any = None) -> Any:
@@ -248,7 +245,7 @@ class OpenAPIResource(Resource):
         tags: set[str] = set(),
     ):
         super().__init__(
-            uri=AnyUrl(uri),  # Convert string to AnyUrl
+            uri=AnyUrl(uri),
             name=name,
             description=description,
             mime_type=mime_type,
@@ -266,49 +263,34 @@ class OpenAPIResource(Resource):
 
             # If this is a templated resource, extract path parameters from the URI
             if "{" in path and "}" in path:
-                # Extract the resource ID from the URI (the last part after the last slash)
                 parts = resource_uri.split("/")
                 if len(parts) > 1:
-                    # Find all path parameters in the route path
                     path_params = {}
-
-                    # Extract parameters from the URI
-                    param_value = parts[
-                        -1
-                    ]  # The last part contains the parameter value
-
-                    # Find the path parameter name from the route path
+                    param_value = parts[-1]
                     param_matches = re.findall(r"\{([^}]+)\}", path)
                     if param_matches:
-                        # Assume the last parameter in the URI is for the first path parameter in the route
                         path_param_name = param_matches[0]
                         path_params[path_param_name] = param_value
-
-                    # Replace path parameters with their values
                     for param_name, param_value in path_params.items():
                         path = path.replace(f"{{{param_name}}}", str(param_value))
 
             response = await self._client.request(
                 method=self._route.method,
                 url=path,
-                timeout=30.0,  # Default timeout
+                timeout=30.0,
             )
 
-            # Raise for 4xx/5xx responses
             response.raise_for_status()
 
-            # Return response content based on mime type
             if self.mime_type == "application/json":
                 try:
                     return response.json()
                 except (json.JSONDecodeError, ValueError):
-                    # Fallback to returning the text
                     return response.text
             else:
                 return response.text
 
         except httpx.HTTPStatusError as e:
-            # Handle HTTP errors (4xx, 5xx)
             error_message = (
                 f"HTTP error {e.response.status_code}: {e.response.reason_phrase}"
             )
@@ -322,7 +304,6 @@ class OpenAPIResource(Resource):
             raise ValueError(error_message)
 
         except httpx.RequestError as e:
-            # Handle request errors (connection, timeout, etc.)
             raise ValueError(f"Request error: {str(e)}")
 
 
@@ -352,7 +333,6 @@ class OpenAPIResourceTemplate(ResourceTemplate):
 
     async def _create_resource_fn(self, **kwargs):
         """Create a resource with parameters."""
-        # Prepare the path with parameters
         path = self._route.path
         for param_name, param_value in kwargs.items():
             path = path.replace(f"{{{param_name}}}", str(param_value))
@@ -361,17 +341,14 @@ class OpenAPIResourceTemplate(ResourceTemplate):
             response = await self._client.request(
                 method=self._route.method,
                 url=path,
-                timeout=30.0,  # Default timeout
+                timeout=30.0,
             )
 
-            # Raise for 4xx/5xx responses
             response.raise_for_status()
 
-            # Determine the mime type from the response
             content_type = response.headers.get("content-type", "application/json")
             mime_type = content_type.split(";")[0].strip()
 
-            # Return the appropriate data
             if mime_type == "application/json":
                 try:
                     return response.json()
@@ -398,20 +375,18 @@ class OpenAPIResourceTemplate(ResourceTemplate):
 
     async def create_resource(self, uri: str, params: dict[str, Any]) -> Resource:
         """Create a resource with the given parameters."""
-        # Generate a URI for this resource instance
         uri_parts = []
         for key, value in params.items():
             uri_parts.append(f"{key}={value}")
 
-        # Create and return a resource
         return OpenAPIResource(
             client=self._client,
             route=self._route,
             uri=uri,
             name=f"{self.name}-{'-'.join(uri_parts)}",
             description=self.description
-            or f"Resource for {self._route.path}",  # Provide default if None
-            mime_type="application/json",  # Default, will be updated when read
+            or f"Resource for {self._route.path}",
+            mime_type="application/json",
             tags=set(self._route.tags or []),
         )
 
@@ -482,13 +457,10 @@ class FastMCPOpenAPI(FastMCP):
         # Process routes
         route_maps = (route_maps or []) + DEFAULT_ROUTE_MAPPINGS
         for route in http_routes:
-            # Determine route type based on mappings or default rules
             route_type = _determine_route_type(route, route_maps)
 
-            # Use operation_id if available, otherwise generate a name
             operation_id = route.operation_id
             if not operation_id:
-                # Generate operation ID from method and path
                 path_parts = route.path.strip("/").split("/")
                 path_name = "_".join(p for p in path_parts if not p.startswith("{"))
                 operation_id = f"{route.method.lower()}_{path_name}"
@@ -500,7 +472,6 @@ class FastMCPOpenAPI(FastMCP):
             elif route_type == RouteType.RESOURCE_TEMPLATE:
                 self._create_openapi_template(route, operation_id)
             elif route_type == RouteType.PROMPT:
-                # Not implemented yet
                 logger.warning(
                     f"PROMPT route type not implemented: {route.method} {route.path}"
                 )
@@ -519,7 +490,6 @@ class FastMCPOpenAPI(FastMCP):
             or f"Executes {route.method} {route.path}"
         )
 
-        # Format enhanced description
         enhanced_description = format_description_with_responses(
             base_description=base_description,
             responses=route.responses,
@@ -535,7 +505,6 @@ class FastMCPOpenAPI(FastMCP):
             is_async=True,
             tags=set(route.tags or []),
         )
-        # Register the tool by directly assigning to the tools dictionary
         self._tool_manager._tools[tool_name] = tool
         logger.debug(
             f"Registered TOOL: {tool_name} ({route.method} {route.path}) with tags: {route.tags}"
@@ -549,7 +518,6 @@ class FastMCPOpenAPI(FastMCP):
             route.description or route.summary or f"Represents {route.path}"
         )
 
-        # Format enhanced description
         enhanced_description = format_description_with_responses(
             base_description=base_description,
             responses=route.responses,
@@ -563,7 +531,6 @@ class FastMCPOpenAPI(FastMCP):
             description=enhanced_description,
             tags=set(route.tags or []),
         )
-        # Register the resource by directly assigning to the resources dictionary
         self._resource_manager._resources[str(resource.uri)] = resource
         logger.debug(
             f"Registered RESOURCE: {resource_uri} ({route.method} {route.path}) with tags: {route.tags}"
@@ -573,7 +540,7 @@ class FastMCPOpenAPI(FastMCP):
         """Creates and registers an OpenAPIResourceTemplate with enhanced description."""
         template_name = operation_id
         path_params = [p.name for p in route.parameters if p.location == "path"]
-        path_params.sort()  # Sort for consistent URIs
+        path_params.sort()
 
         uri_template_str = f"resource://openapi/{template_name}"
         if path_params:
@@ -583,7 +550,6 @@ class FastMCPOpenAPI(FastMCP):
             route.description or route.summary or f"Template for {route.path}"
         )
 
-        # Format enhanced description
         enhanced_description = format_description_with_responses(
             base_description=base_description,
             responses=route.responses,
@@ -608,7 +574,6 @@ class FastMCPOpenAPI(FastMCP):
             parameters=template_params_schema,
             tags=set(route.tags or []),
         )
-        # Register the template by directly assigning to the templates dictionary
         self._resource_manager._templates[uri_template_str] = template
         logger.debug(
             f"Registered TEMPLATE: {uri_template_str} ({route.method} {route.path}) with tags: {route.tags}"
@@ -620,8 +585,7 @@ class FastMCPOpenAPI(FastMCP):
         context = self.get_context()
         result = await self._tool_manager.call_tool(name, arguments, context=context)
 
-        # For other tools, ensure the response is wrapped in TextContent
-        if isinstance(result, dict | str):
+        if isinstance(result, (dict, str)):
             if isinstance(result, dict):
                 result_text = json.dumps(result)
             else:

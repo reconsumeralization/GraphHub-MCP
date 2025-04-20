@@ -1,0 +1,1 @@
+﻿Rule 007: Automate CI pipeline to run lint, type-check, tests, and security scans on pull requests.
